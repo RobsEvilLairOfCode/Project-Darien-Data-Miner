@@ -10,10 +10,12 @@ public class RunArguments {
 	private int numofParams;//The number of parameters present(default = 7)
 	private int dataRow; // what row the data starts at (default = 21)
 	private int dataCol; // what column the data starts at not counting labels (default = 0)
-	private int sheetVersion;
+	private String compareKey;
+	private HashMap<String, String> targetParams;
+
 	
 	public RunArguments(int sectionLen, int runIDRow, int runIDCol, int paramsRow, int paramsCol, int numofParams,
-			int dataRow, int dataCol,int sheetVersion) {
+			int dataRow, int dataCol,String compareKey) {
 		super();
 		this.sectionLen = sectionLen;
 		this.runIDRow = runIDRow;
@@ -23,70 +25,25 @@ public class RunArguments {
 		this.numofParams = numofParams;
 		this.dataRow = dataRow;
 		this.dataCol = dataCol;
-		this.sheetVersion = sheetVersion;
+		this.compareKey = compareKey;
 	}
 
-	public static RunArguments getDefault() {
-		String[][] CSV = CSVManager.CSVCells;
-		if(CSV[6][10].contains("count students with")){
+	public static RunArguments getDefault(CSVManager manager) {
+		if(manager.getCSVCells()[6][10].contains("count students with")){
 			return null;
 		}else {
-			return new RunArguments(6,6,0,7,0,8,22,0,1);
+			return new RunArguments(6,6,0,7,0,8,22,0,"percent-vaccinated");
 		}
 		
 	}
 	
-	public static RunArguments autoGenerate() {
-		String[][] CSV = CSVManager.CSVCells;
-		if(CSV[6][10].contains("count students with")){
-			return null;
-		}else {
-			return autoGenerateV1();
-		}
-	}
-	public static RunArguments autoGenerateV2() {
-		int sl = -1,ridr = -1,ridc = -1,pr = -1,pc = -1,nop = -1,dr = -1,dc = -1;// If the value could not be determined, -1 will be returned
-		String[][] CSV = CSVManager.CSVCells;
-		
-		for(int row = 0; row < CSV.length; row++) {
-			for(int column = 0; column < CSV[0].length; column++) {
-				if(CSV[row][column].contains("run number")) {
-					ridr = row;
-					ridc = column;
-					
-					pr = row;
-					pc = column + 1;
-					
-					dr = row;
-				}
-				if(CSV[row][column].contains("count students")) {
-					dc = column - 1;
-					sl = 0;
-					for(int col = column; col < CSV[row].length; col++) {
-						if(CSV[row][col].contains("count students")) {
-							sl++;
-						}else {
-							break;
-						}
-					}
-				}
-				
-				if(pc != -1 && pr != -1) {
-					nop = 0;
-					for(int col = 0; col < CSV[pr].length; col++) {
-						if(CSV[pr][col].contains("count students with"))break;
-						nop++;
-					}
-				}
-			}
-		}
-		return new RunArguments(sl,ridr,ridc,pr,pc,nop,dr,dc,2);
-	}
 	//Reads a 2D array of each cell in the CSV
-	public static RunArguments autoGenerateV1() {
-		int sl = -1,ridr = -1,ridc = -1,pr = -1,pc = -1,nop = -1,dr = -1,dc = -1;// If the value could not be determined, -1 will be returned
-		boolean urv = false;//Abbreviations of the parameters
-		String[][] CSV = CSVManager.CSVCells;
+	public static RunArguments autoGenerate(CSVManager manager) {
+		int sl = -1,ridr = -1,ridc = -1,pr = -1,pc = -1,nop = -1,dr = -1,dc = -1;// If the value could not be determined, -1 will be returnedf
+		String[][] CSV = manager.getCSVCells();
+		String ck = "percent-vaccinated";
+		if(manager.getCSVCells()[2][0].contains("Mask Tipping Point")) ck = "%mask-compliance";
+		else if(manager.getCSVCells()[2][0].contains("Vaccine Tipping Point")) ck = "percent-vaccinated";
 		
 		for(int row = 0; row < CSV.length; row++) {
 			for(int column = 0; column < CSV[0].length; column++) {
@@ -94,7 +51,7 @@ public class RunArguments {
 				
 				//Finding the Section Length and Run ID Pos
 				if(currentCell.contains("run number")) {
-					if(column + 1 < CSVManager.getLongestRow() && !CSV[row][column + 1].isBlank()) { //Avoid going out of bounds
+					if(column + 1 < manager.getLongestRow() && !CSV[row][column + 1].isBlank()) { //Avoid going out of bounds
 						boolean allDigits = true;
 						for(char c: CSV[row][column + 1].toCharArray()) {// is the text in the next cell all digits? If so, we know the following cells are numerical
 							if(!Character.isDigit(c)) {
@@ -103,7 +60,6 @@ public class RunArguments {
 							}
 						}
 						if(allDigits) {
-							System.out.println("Column: " + column);
 							ridr = row;
 							ridc = column;//Column next to label column contains offset
 							pr = row +1;//Next Row down contain parameters
@@ -142,34 +98,24 @@ public class RunArguments {
 						}
 					}
 				}
-				//findhing dr,dc
+				//finding dr,dc
 				if(currentCell.contains("run") && currentCell.contains("data")) {
-					//
 					dr = row;
 					dc = column;
 				}
-				
-				if(currentCell.contains("mean")) {
-					if(column + 1 < CSVManager.getLongestRow() && !CSV[row][column + 1].isBlank() || !CSV[row][column + 1].isEmpty()) { //Avoid going out of bounds
-						boolean allDigits = true;
-						for(char c: CSV[row][column + 1].toCharArray()) {// is the text in the next cell all digits? If so, we know the following cells are numerical
-							if(!Character.isDigit(c) || c == '.') {
-								allDigits = false;
-								break;
-							}
-						}
-						if(allDigits) {
-							urv = true;
-						}
-					}
-				
-				
-				}
 			}
 		}
-		return new RunArguments(sl,ridr,ridc,pr,pc,nop,dr,dc,1);
+		return new RunArguments(sl,ridr,ridc,pr,pc,nop,dr,dc,ck);
 	}
 
+
+	public HashMap<String, String> getTargetParams() {
+		return targetParams;
+	}
+
+	public void setTargetParams(HashMap<String, String> targetParams) {
+		this.targetParams = targetParams;
+	}
 
 	public int getSectionLen() {
 		return sectionLen;
@@ -249,16 +195,26 @@ public class RunArguments {
 	public void setDataCol(int dataCol) {
 		this.dataCol = dataCol;
 	}
+	public String getCompareKey() {
+		return compareKey;
+	}
 
-	public int getVersion() {
-		return this.sheetVersion;
+	public void setCompareKey(String compareKey) {
+		this.compareKey = compareKey;
 	}
 	
 	@Override
 	public String toString() {
 		return "RunArguments [sectionLen=" + sectionLen + ", runIDRow=" + runIDRow + ", runIDCol=" + runIDCol
 				+ ", paramsRow=" + paramsRow + ", paramsCol=" + paramsCol + ", numofParams=" + numofParams
-				+ ", dataRow=" + dataRow + ", dataCol=" + dataCol + "]";
+				+ ", dataRow=" + dataRow + ", dataCol=" + dataCol + ", compareKey=" + compareKey + ", targetParams="
+				+ targetParams + "]";
 	}
+	
+	public void update(CSVManager manager) {
+		manager.setRunArgs(this);
+	}
+
+
 }
 

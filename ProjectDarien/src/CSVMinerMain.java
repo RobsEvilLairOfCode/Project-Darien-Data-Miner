@@ -1,19 +1,8 @@
 import java.io.File;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Set;
-import java.util.TreeSet;
-import java.util.concurrent.ExecutionException;
-
 import javafx.application.Application;
-import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
-import javafx.collections.FXCollections;
-import javafx.concurrent.Task;
 import javafx.concurrent.WorkerStateEvent;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
@@ -23,24 +12,18 @@ import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
-import javafx.scene.control.RadioButton;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.ScrollPane.ScrollBarPolicy;
-import javafx.scene.control.Spinner;
-import javafx.scene.control.SpinnerValueFactory;
 import javafx.scene.control.TextField;
-import javafx.scene.control.ToggleGroup;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.FileChooser.ExtensionFilter;
 import javafx.stage.Stage;
-import javafx.stage.Window;
 
 public class CSVMinerMain extends Application{
 	public static void main(String[] args) {
@@ -51,7 +34,8 @@ public class CSVMinerMain extends Application{
 	public final double WINDOWSIZEY = 400;
 	public final double PADDING = 20.0;
 	
-	public static RunArguments runArguments = RunArguments.getDefault();
+	private RunArguments runArguments = null;
+	private CSVManager manager = null;
 	@Override
 	public void start(Stage primaryStage) throws Exception {
 		primaryStage.setTitle("Project Darien Data Averager");
@@ -67,7 +51,6 @@ public class CSVMinerMain extends Application{
 		
 		Pane fileSelectionPane = getFileSelectionPane(nextButton);
 		Pane runArgumentPane = getRunArgumentPane();
-		Pane compareKeyandParamPane = null;
 		
 
 		nextButton.setDisable(true);
@@ -76,14 +59,14 @@ public class CSVMinerMain extends Application{
 			@Override
 			public void handle(ActionEvent arg0) {
 				if(fileSelectionPane.getParent() == primaryPane) {//If the fileSelectPane is open, go to the run argument pane
-					if(!CSVManager.isInitialized()) {//Ensure CSVManager is initialized
+					if(!manager.isInitialized()) {//Ensure CSVManager is initialized
 						ProgressBar pb = new ProgressBar();
 						Label progtext = new Label("0%");
 						pb.setPrefWidth(WINDOWSIZEX);
 						nextbackPane.getChildren().addAll(pb,progtext);
 						StackPane.setAlignment(pb, Pos.BOTTOM_CENTER);
 						StackPane.setAlignment(progtext, Pos.BOTTOM_CENTER);
-						pb.progressProperty().bind(CSVManager.init.progressProperty());
+						pb.progressProperty().bind(manager.init.progressProperty());
 						pb.progressProperty().addListener(new ChangeListener<Number>() {
 
 							@Override
@@ -95,9 +78,9 @@ public class CSVMinerMain extends Application{
 									nextbackPane.getChildren().removeAll(pb,progtext);
 								}
 							}});
-						new Thread(CSVManager.init).start();
+						new Thread(manager.init).start();
 					}
-					CSVManager.init.setOnSucceeded(new EventHandler<WorkerStateEvent>() {
+					manager.init.setOnSucceeded(new EventHandler<WorkerStateEvent>() {
 
 						@Override
 						public void handle(WorkerStateEvent arg0) {
@@ -109,12 +92,14 @@ public class CSVMinerMain extends Application{
 					
 					
 				}else if(runArgumentPane.getParent() == primaryPane) {
+					runArguments.update(manager);
+					
 					ProgressBar pb = new ProgressBar();
 					Label progtext = new Label("Mining - 0%");
 					pb.setPrefWidth(WINDOWSIZEX);
 					StackPane.setAlignment(pb, Pos.BOTTOM_CENTER);
 					StackPane.setAlignment(progtext, Pos.BOTTOM_CENTER);
-					pb.progressProperty().bind(CSVManager.mine.progressProperty());
+					pb.progressProperty().bind(manager.mine.progressProperty());
 					nextbackPane.getChildren().addAll(pb,progtext);
 					pb.progressProperty().addListener(new ChangeListener<Number>() {
 
@@ -122,22 +107,22 @@ public class CSVMinerMain extends Application{
 						public void changed(ObservableValue<? extends Number> arg0, Number arg1, Number arg2) {
 							progtext.setText("Mining - " + (int)Math.round(arg2.doubleValue() * 100) + "%");
 						}});
-					new Thread(CSVManager.mine).start();
-					CSVManager.mine.setOnSucceeded(new EventHandler<WorkerStateEvent>() {
+					new Thread(manager.mine).start();
+					manager.mine.setOnSucceeded(new EventHandler<WorkerStateEvent>() {
 
 						@Override
 						public void handle(WorkerStateEvent arg0) {
-							pb.setVisible(false);
-							progtext.setVisible(false);
-							nextbackPane.getChildren().removeAll(pb,progtext);
-							primaryPane.getChildren().remove(runArgumentPane);
-							Pane comparePane = getCompareKeyandParamPane();
-							comparePane.setId("comparePane");
-							primaryPane.setCenter(comparePane);
+							manager.analyize.run();
+							progtext.setText("Saved Analysis Sheet: " + manager.getAnalysisFile().getAbsolutePath());
+							//pb.setVisible(false);
+							//progtext.setVisible(false);
+							//nextbackPane.getChildren().removeAll(pb,progtext);
+							//primaryPane.getChildren().remove(runArgumentPane);
+
 						}});
 					
 				}else if(primaryPane.getCenter().getId().equals("comparePane")) {//When it is the getCompareKeyandParamPane;
-					new Thread(CSVManager.analyize).start();
+					
 				}
 				
 			}});
@@ -147,7 +132,7 @@ public class CSVMinerMain extends Application{
 			@Override
 			public void handle(ActionEvent arg0) {
 				if(runArgumentPane.getParent() == primaryPane) {
-					CSVManager.wipe();
+					manager.wipe();
 					backButton.setDisable(true);
 					primaryPane.getChildren().remove(runArgumentPane);
 					primaryPane.setCenter(fileSelectionPane);
@@ -176,22 +161,37 @@ public class CSVMinerMain extends Application{
 		}
 	}
 	public void handleCMD() {
+		System.out.println("Using Command Line Mode");
+		
 		List<String> params = this.getParameters().getRaw();
 		String filePath = params.get(0);
-		String runOp = params.get(1);
-		String compareKey = params.get(2);
-
-		CSVManager.setCSVFile(new File(filePath));
-		CSVManager.init.run();
-		if(runOp.contentEquals("-d"))CSVMinerMain.runArguments = RunArguments.getDefault();
-		else if(runOp.contentEquals("-a"))CSVMinerMain.runArguments = RunArguments.autoGenerate();
-		
-		CSVManager.mine.run();
+		if(filePath.contentEquals("-help")) printHelp();
+		if(new File(filePath).isDirectory()) {
+			int completed = 0;
+			for(File file: new File(filePath).listFiles()) {
+				if(file.getName().contains(".csv")) {
+					handleFileCMD(file);
+				}
+				completed++;
+				System.out.println(completed + " out of " + new File(filePath).listFiles().length);
+			}
+		}else {
+			handleFileCMD(new File(filePath));
+		}
+		System.exit(0);
+	}
+	public void handleFileCMD(File csv) {
+		CSVManager managerCMD = new CSVManager(csv,runArguments);
+		managerCMD.init.run();
+		RunArguments runArgumentsCMD = RunArguments.autoGenerate(managerCMD);
+		runArgumentsCMD.update(managerCMD);
+		managerCMD.mine.run();
 			
-		CSVManager.compareKey = compareKey;
-		CSVManager.targetParams = null;
-		
-		CSVManager.analyize.run();
+		managerCMD.analyize.run();
+	}
+	public void printHelp() {
+		System.out.println("Jar Usage: java -jar PDMine.jar [FILEPATH]");
+		System.out.println("EXE Usage: PDMine.exe [FILEPATH]");
 		System.exit(0);
 	}
 	public Pane getFileSelectionPane(Button nextButton) {//First Pane
@@ -205,11 +205,6 @@ public class CSVMinerMain extends Application{
 		header.setMaxWidth(WINDOWSIZEX - PADDING);
 		header.setMaxHeight(WINDOWSIZEY - PADDING);
 		
-		if(CSVManager.CSVFile != null) {
-			pathField.setText(CSVManager.CSVFile.getAbsolutePath());
-		}else {
-			pathField.setText("");
-		}
 		pathField.textProperty().addListener(new ChangeListener<String>() {
 
 			@Override
@@ -232,7 +227,7 @@ public class CSVMinerMain extends Application{
 				fileChooser.setTitle("Please select the CSV File");
 				fileChooser.getExtensionFilters().add(new ExtensionFilter("Comma Seperated Variables (*.csv)","*.csv"));
 				File choice = fileChooser.showOpenDialog(new Stage());
-				CSVManager.setCSVFile(choice);
+				manager = new CSVManager(choice,runArguments);
 				pathField.setText(choice.getAbsolutePath());
 			}});
 		
@@ -277,7 +272,7 @@ public class CSVMinerMain extends Application{
 						return;
 					}
 				}
-				if(!arg2.isBlank() && Integer.parseInt(arg2) > CSVManager.CSVRows.length) {
+				if(!arg2.isBlank() && Integer.parseInt(arg2) > manager.getCSVRows().length) {
 					secLen.setText(arg1);
 					return;
 				}
@@ -297,7 +292,7 @@ public class CSVMinerMain extends Application{
 						return;
 					}
 				}
-				if(!arg2.isBlank() && Integer.parseInt(arg2) > CSVManager.CSVRows.length) {
+				if(!arg2.isBlank() && Integer.parseInt(arg2) > manager.getCSVRows().length) {
 					runIDRow.setText(arg1);
 					return;
 				}
@@ -317,7 +312,7 @@ public class CSVMinerMain extends Application{
 						return;
 					}
 				}
-				if(!arg2.isBlank() && Integer.parseInt(arg2) > CSVManager.CSVRows.length) {
+				if(!arg2.isBlank() && Integer.parseInt(arg2) > manager.getCSVRows().length) {
 					runIDCol.setText(arg1);
 					return;
 				}
@@ -341,7 +336,7 @@ public class CSVMinerMain extends Application{
 						return;
 					}
 				}
-				if(!arg2.isBlank() && Integer.parseInt(arg2) > CSVManager.CSVRows.length) {
+				if(!arg2.isBlank() && Integer.parseInt(arg2) > manager.getCSVRows().length) {
 					paramsRow.setText(arg1);
 					return;
 				}
@@ -361,7 +356,7 @@ public class CSVMinerMain extends Application{
 						return;
 					}
 				}
-				if(!arg2.isBlank() && Integer.parseInt(arg2) > CSVManager.CSVRows.length) {
+				if(!arg2.isBlank() && Integer.parseInt(arg2) > manager.getCSVRows().length) {
 					paramsCol.setText(arg1);
 					return;
 				}
@@ -385,7 +380,7 @@ public class CSVMinerMain extends Application{
 						return;
 					}
 				}
-				if(!arg2.isBlank() && Integer.parseInt(arg2) > CSVManager.CSVRows.length) {
+				if(!arg2.isBlank() && Integer.parseInt(arg2) > manager.getCSVRows().length) {
 					numOfParams.setText(arg1);
 					return;
 				}
@@ -405,7 +400,7 @@ public class CSVMinerMain extends Application{
 						return;
 					}
 				}
-				if(!arg2.isBlank() && Integer.parseInt(arg2) > CSVManager.CSVRows.length) {
+				if(!arg2.isBlank() && Integer.parseInt(arg2) > manager.getCSVRows().length) {
 					dataRow.setText(arg1);
 					return;
 				}
@@ -426,19 +421,33 @@ public class CSVMinerMain extends Application{
 						return;
 					}
 				}
-				if(!arg2.isBlank() && Integer.parseInt(arg2) > CSVManager.CSVRows.length) {
+				if(!arg2.isBlank() && Integer.parseInt(arg2) > manager.getCSVRows().length) {
 					dataCol.setText(arg1);
 					return;
 				}
 				runArguments.setDataCol(Integer.parseInt(arg2));
 				System.out.println(runArguments.toString());
 			}});
+		TextField compareKey = new TextField();
+		compareKey.setPromptText("Compare Key");
+		compareKey.textProperty().addListener(new ChangeListener<String>() {
+
+			@Override
+			public void changed(ObservableValue<? extends String> arg0, String arg1, String arg2) {
+				runArguments.setCompareKey(arg2);
+				System.out.println(runArguments.toString());
+			}});
+		
+		TextField filler3 = new TextField();//Useless, Not Visible
+		filler3.setVisible(false);
+		filler3.setDisable(true);
+		
 		
 		autogenButton.setOnAction(new EventHandler<ActionEvent>() {
 
 			@Override
 			public void handle(ActionEvent arg0) {
-				runArguments = RunArguments.autoGenerate();
+				runArguments = RunArguments.autoGenerate(manager);
 				
 				secLen.setText(runArguments.getSectionLen() + "");
 				runIDRow.setText(runArguments.getRunIDRow() + "");
@@ -448,13 +457,14 @@ public class CSVMinerMain extends Application{
 				numOfParams.setText(runArguments.getNumofParams() + "");
 				dataRow.setText(runArguments.getDataRow() + "");
 				dataCol.setText(runArguments.getDataCol() + "");
+				compareKey.setText(runArguments.getCompareKey() + "");
 			}});
 		
 		defaultButton.setOnAction(new EventHandler<ActionEvent>() {
 
 			@Override
 			public void handle(ActionEvent arg0) {
-				runArguments = RunArguments.getDefault();
+				runArguments = RunArguments.getDefault(manager);
 				
 				secLen.setText(runArguments.getSectionLen() + "");
 				runIDRow.setText(runArguments.getRunIDRow() + "");
@@ -464,6 +474,7 @@ public class CSVMinerMain extends Application{
 				numOfParams.setText(runArguments.getNumofParams() + "");
 				dataRow.setText(runArguments.getDataRow() + "");
 				dataCol.setText(runArguments.getDataCol() + "");
+				compareKey.setText(runArguments.getCompareKey() + "");
 			}});
 		
 		valuesBox.setLeft(valuesBoxLeft);
@@ -475,8 +486,8 @@ public class CSVMinerMain extends Application{
 		valuesBoxRight.setMaxWidth(WINDOWSIZEX/2);
 		valuesBoxLeft.setAlignment(Pos.CENTER);
 		valuesBoxRight.setAlignment(Pos.CENTER);
-		valuesBoxLeft.getChildren().addAll(secLen,runIDRow,paramsRow,numOfParams,dataRow);
-		valuesBoxRight.getChildren().addAll(filler1,runIDCol,paramsCol,filler2,dataCol);
+		valuesBoxLeft.getChildren().addAll(secLen,runIDRow,paramsRow,numOfParams,dataRow,compareKey);
+		valuesBoxRight.getChildren().addAll(filler1,runIDCol,paramsCol,filler2,dataCol,filler3);
 		
 		valuescrollPane.setContent(valuesBox);
 		valuescrollPane.setHbarPolicy(ScrollBarPolicy.NEVER);
@@ -487,75 +498,5 @@ public class CSVMinerMain extends Application{
 
 		return parent;
 	}
-	public Pane getCompareKeyandParamPane() {
-		VBox parent = new VBox(20);
-		Label header = new Label();
-		HBox compareKeyPane = new HBox(5);
-			Label compareKeyLabel = new Label("Compare Key: ");
-			Spinner<String> compareKeySpinner = new Spinner<String>();
-		ScrollPane paramPaneScroll = new ScrollPane();
-		HBox paramPane = new HBox(20);
-		
-		header.setText("Enter the compare key into the spinner, and then select the exclusive params, or pick 'All data' to use all data in analysis.");
-		header.setWrapText(true);
-		
-		SpinnerValueFactory.ListSpinnerValueFactory<String> compareKeyFactory = new SpinnerValueFactory.ListSpinnerValueFactory<String>(FXCollections.observableList(new ArrayList<String>(CSVManager.simRunData[0].getParameters().keySet())));
-		compareKeySpinner.setValueFactory(compareKeyFactory);
-		
-		compareKeySpinner.valueProperty().addListener(new ChangeListener<String>() {//Populates the paramPane with radioButtons represent the param constraints
 
-			@Override
-			public void changed(ObservableValue<? extends String> arg0, String arg1, String arg2) {
-				CSVManager.compareKey = arg2;
-				paramPane.getChildren().clear();
-				
-				HashSet<HashMap<String, String>> paramList = new HashSet<HashMap<String, String>>();
-				for(SimRun run: CSVManager.simRunData) { // remove the compare key from the lists
-					HashMap<String, String> params = (HashMap<String, String>) run.getParameters().clone();
-					params.remove(CSVManager.compareKey);
-					paramList.add(params);
-				}
-				System.out.println( "Removed key:"+ arg2 + " for "+ paramList.toString());
-				ToggleGroup toggleGroup = new ToggleGroup();//
-				//Add in all data button first
-				RadioButton addAllButton = new RadioButton();
-				addAllButton.setToggleGroup(toggleGroup);
-				addAllButton.setText("Add All");
-				toggleGroup.selectToggle(addAllButton);
-				addAllButton.setOnAction(new EventHandler<ActionEvent>() {
-
-					@Override
-					public void handle(ActionEvent arg0) {
-						CSVManager.targetParams = null;
-						SimRun.adjustSimRunList();
-					}});
-				paramPane.getChildren().add(addAllButton);
-				for(HashMap<String, String> params: paramList) {
-					RadioButton button = new RadioButton();
-					button.setToggleGroup(toggleGroup);
-					String text = "";
-					text = params.toString().replace(',', '\n');
-					button.setText(text);
-					button.setUserData(params);
-					button.setOnAction(new EventHandler<ActionEvent>() {
-
-						@Override
-						public void handle(ActionEvent arg0) {
-							CSVManager.targetParams = params;
-							SimRun.adjustSimRunList();
-						}});
-					paramPane.getChildren().add(button);
-				}
-			}
-		});
-		
-		paramPaneScroll.setMaxHeight(200);
-		paramPaneScroll.setPrefHeight(200);
-		compareKeyPane.getChildren().addAll(compareKeyLabel, compareKeySpinner);
-		paramPaneScroll.setContent(paramPane);
-		parent.getChildren().addAll(header,compareKeyPane,paramPaneScroll);
-		
-		
-		return parent;
-	}
 }
