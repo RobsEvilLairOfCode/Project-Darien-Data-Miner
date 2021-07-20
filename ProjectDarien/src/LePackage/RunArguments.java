@@ -8,6 +8,18 @@ import java.util.Scanner;
 
 public class RunArguments {
 	//Locating the Data
+	public enum MODE{
+		Average,Compress
+	}
+	private MODE mode;//mode the application will run in
+	public MODE getMode() {
+		return mode;
+	}
+
+	public void setMode(MODE mode) {
+		this.mode = mode;
+	}
+
 	private int sectionLen; //The length of each section(default = 6)
 	private int runIDRow;// what row the runid's are located on (default = 6)
 	private int runIDCol;// what column the parameters are located on (default = 0)
@@ -16,13 +28,15 @@ public class RunArguments {
 	private int numofParams;//The number of parameters present(default = 7)
 	private int dataRow; // what row the data starts at (default = 21)
 	private int dataCol; // what column the data starts at not counting labels (default = 0)
+	private int day;//If left blank, last day is assumed(-1)
 	private String compareKey;
 	private HashMap<String, String> targetParams;
 
 	
-	public RunArguments(int sectionLen, int runIDRow, int runIDCol, int paramsRow, int paramsCol, int numofParams,
-			int dataRow, int dataCol,String compareKey) {
+	public RunArguments(MODE mode,int sectionLen, int runIDRow, int runIDCol, int paramsRow, int paramsCol, int numofParams,
+			int dataRow, int dataCol, int day, String compareKey) {
 		super();
+		this.mode = mode;
 		this.sectionLen = sectionLen;
 		this.runIDRow = runIDRow;
 		this.runIDCol = runIDCol;
@@ -31,6 +45,7 @@ public class RunArguments {
 		this.numofParams = numofParams;
 		this.dataRow = dataRow;
 		this.dataCol = dataCol;
+		this.day = day;
 		this.compareKey = compareKey;
 		
 	}
@@ -39,7 +54,7 @@ public class RunArguments {
 		if(manager.getCSVCells()[6][10].contains("count students with")){
 			return null;
 		}else {
-			return new RunArguments(6,6,0,7,0,8,22,0,"percent-vaccinated");
+			return new RunArguments(MODE.Average,6,6,0,7,0,8,22,0,0,"percent-vaccinated");
 		}
 		
 	}
@@ -111,7 +126,9 @@ public class RunArguments {
 			}
 		
 		String ck = "percent-vaccinated";
-		String tptext = manager.getCSVCells()[2][0].toLowerCase().substring(0, manager.getCSVCells()[2][0].toLowerCase().indexOf("tipping point")).trim();
+		String tptext = manager.getCSVCells()[2][0].toLowerCase().substring(0, manager.getCSVCells()[2][0].toLowerCase().indexOf(" tipping point")).strip();
+		
+		System.out.println(tptext);
 		switch(tptext) {
 			case "vaccine":
 				ck = "percent-vaccinated";
@@ -125,6 +142,12 @@ public class RunArguments {
 			case "masking":
 				ck = "%mask-compliance";
 				break;
+			case "varient":
+				ck = "varient";
+				break;
+			case "variant":
+				ck = "variant";
+				break;
 			default:
 				ck = "percent-vaccinated";
 				break;
@@ -137,47 +160,7 @@ public class RunArguments {
 		 * 
 		 * ck = manager.getCSVCells()[i][pc]; break; } }
 		 */
-		return new RunArguments(sl,ridr,ridc,pr,pc,nop,dr,dc,ck);
-	}
-
-	private static boolean closeMatch(String tp, String ck) {
-		final String url = "https://www.thefreedictionary.com/";
-		final String divClass1 = "data-src=\"hm\"";
-		final String divClass2= "class=\"pseg\"";
-		final String[] words = tp.split(" ");
-		Scanner reader = null;
-		int passed = 0;
-		int evalID = 0;
-		ArrayList<String> tenses = new ArrayList<String>();
-		for(String str: words) {
-			try {
-				System.out.println("Attempting to open: "+ url + str);
-				reader = new Scanner(new URL(url + str).openStream());
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-			while(reader.hasNext()) {
-				String next = reader.nextLine();
-				if (next.contains(divClass1)) {
-					evalID = 1;
-				}else if (next.contains(divClass2)) {
-					evalID = 2;
-				}else if (evalID == 1){
-					tenses.add(next.replace("<h2>", "").replace("</h2>", "").replace("·", "").trim().toLowerCase());
-					evalID = 0;
-				}else if (evalID == 2) {
-					tenses.add(next.replace("<span class=\"hvr\">", "").replace("</span>", "").replace("·", "").trim().toLowerCase());
-					evalID = 0;
-				}
-			}
-		}
-		System.out.println(tenses);
-		for(String str:tenses) {
-			if(ck.contains(str)) passed++;
-		}
-		return passed >= words.length;
-		
+		return new RunArguments(MODE.Average,sl,ridr,ridc,pr,pc,nop,dr,dc,-1,ck);
 	}
 
 	public HashMap<String, String> getTargetParams() {
@@ -225,6 +208,13 @@ public class RunArguments {
 
 	public void setParamsRow(int paramsRow) {
 		this.paramsRow = paramsRow;
+	}
+	public int getDay() {
+		return this.day;
+	}
+	
+	public void setDay(int day) {
+		this.day = day;
 	}
 
 
@@ -276,10 +266,10 @@ public class RunArguments {
 	
 	@Override
 	public String toString() {
-		return "RunArguments [sectionLen=" + sectionLen + ", runIDRow=" + runIDRow + ", runIDCol=" + runIDCol
-				+ ", paramsRow=" + paramsRow + ", paramsCol=" + paramsCol + ", numofParams=" + numofParams
-				+ ", dataRow=" + dataRow + ", dataCol=" + dataCol + ", compareKey=" + compareKey + ", targetParams="
-				+ targetParams + "]";
+		return "RunArguments [mode=" + mode + ", sectionLen=" + sectionLen + ", runIDRow=" + runIDRow + ", runIDCol="
+				+ runIDCol + ", paramsRow=" + paramsRow + ", paramsCol=" + paramsCol + ", numofParams=" + numofParams
+				+ ", dataRow=" + dataRow + ", dataCol=" + dataCol + ", day=" + day + ", compareKey=" + compareKey
+				+ ", targetParams=" + targetParams + "]";
 	}
 	
 	public void update(CSVManager manager) {

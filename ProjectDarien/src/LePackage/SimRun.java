@@ -92,10 +92,23 @@ public class SimRun {
 	private double average(SimRun other,Categories category, int tick) {
 		return (variables.get(category).get(tick) + other.getVariables().get(category).get(tick))/2.0;
 	}
-	public double getFinal(Categories c) {
+	public double getDay(Categories c,int day) {
 		ArrayList<Double> list = variables.get(c);
-		return list.get(list.size() - 1);
-	
+		if(day==0)return list.get(list.size() - 1);
+		return list.get(day - 1);
+	}	
+	public double getFinal(Categories c) {
+		return getDay(c,0);
+	}
+	public int getFinalDayNumber() {
+		return variables.get(Categories.Exposed).size() - 1;
+	}
+	public static int getFinalDayNumber(SimRun[] runs) {
+		int least = Integer.MAX_VALUE;
+		for(SimRun run: runs) {
+			least = Math.min(run.getFinalDayNumber(), least);
+		}
+		return least;
 	}
 	public HashMap<Categories,Double> getAllFinal() {
 		HashMap<Categories,Double> results = new HashMap<Categories, Double>();
@@ -104,14 +117,23 @@ public class SimRun {
 		}
 		return results;
 	}
-
+	public HashMap<Categories,Double> getAllDay(int day) {
+		HashMap<Categories,Double> results = new HashMap<Categories, Double>();
+		for(Categories c:Categories.values()) {
+			results.put(c,getDay(c,day));
+		}
+		return results;
+	}
 	public static TreeMap<String,HashMap<Categories,Double>> averageAllResults(SimRun[] runs, RunArguments runArgs){
+		System.out.println(1);
 		TreeMap<String,HashMap<Categories,Double>> results = new TreeMap<String,HashMap<Categories,Double>>(findGreaterInt);
 		TreeMap<String,ArrayDeque<SimRun>> sortedRuns = new TreeMap<String,ArrayDeque<SimRun>>(findGreaterInt);//runs sorted by a common compare key value
+		System.out.println(2);
 		for(SimRun run: runs) {
 			results.putIfAbsent(run.getParameters().get(runArgs.getCompareKey()),new HashMap<Categories,Double>());// Fill in keys
 			sortedRuns.putIfAbsent(run.getParameters().get(runArgs.getCompareKey()),new ArrayDeque<SimRun>());// Fill in keys
 		}
+		System.out.println(3);
 		//sort the runs into the sorted runs map
 		for(String key: results.keySet()) {
 			for(SimRun run:runs) {
@@ -126,18 +148,22 @@ public class SimRun {
 				}
 			}
 		}
+		System.out.println(4);
 		//averages the sorted runs
 		for(String key: sortedRuns.keySet()) {
 			for(Categories c: Categories.values()) {
+				System.out.println("Running");
 				double sum = 0;
 				double count = sortedRuns.get(key).size();
-			
+				System.out.println("Running");
 				for(SimRun run:sortedRuns.get(key)) {
-					sum += run.getFinal(c);
+					sum += run.getDay(c,0);
 				}
+				System.out.println("Running");
 				results.get(key).put(c, sum/count);
 			}
 		}
+		System.out.println(5);
 		//procedure
 		// Copy all the runs into a set. Sort all the runs by the the compare key value and place them into a map(<String, List<SimRun>>) with the compare key values as the key
 		//and lists of filtered sim runs as the values.
@@ -207,6 +233,19 @@ public class SimRun {
 		return variance;
 	}
 
+//	public String[][] toStringArray(){
+	//	String[][] ret = new String[this.parameters.size()][6];
+//		return ret;
+	//}
+	
+	public String[] paramstoString() {
+			return (String[])this.parameters.values().toArray();
+	}
+	
+	////	String[][] ret = new String[6][6];
+	//	ret[0] = Arrays.stream(e.getEnumConstants()).map(Enum::name).toArray(String[]::new);
+	//}
+	//
 	public static Comparator<String> findGreaterInt= new Comparator<String>() {
 
 		@Override
@@ -228,4 +267,47 @@ public class SimRun {
 			return alldigit;
 		}
 	};
+	public static HashMap<HashMap<String,String>,ArrayList<SimRun>> sortRunsByParameter(SimRun[] runs){//Map<Parameter,Runs Associated>
+		HashMap<HashMap<String,String>,ArrayList<SimRun>> sortedRuns = new HashMap<HashMap<String,String>,ArrayList<SimRun>>();
+		for(SimRun run: runs) {
+			HashMap<String,String> params = run.getParameters();
+			if(sortedRuns.get(params) == null) {
+				sortedRuns.put(params,new ArrayList<SimRun>());
+			}
+			sortedRuns.get(params).add(run);
+		}
+		return sortedRuns;
+	}
+	public static SimRun compressRuns(SimRun[] runs) {
+		int maxCount= SimRun.getFinalDayNumber(runs);
+		HashMap<Categories, ArrayList<Double>> variables = new HashMap<Categories, ArrayList<Double>>();
+		for(Categories c: Categories.values()) {
+			ArrayList<Double> values= new ArrayList<Double>();
+			for(int day = 0; day < maxCount; day++) {
+				double sum = 0;
+				for(int run =0; run < runs.length; run++) {
+					sum+=runs[run].getDay(c, day);
+				}
+				double average = sum / (double)runs.length;
+				values.add(average);
+			}
+			variables.put(c, values);
+		}
+		SimRun simrun = new SimRun(0,runs[0].getParameters(), variables);
+		return simrun;
+	}
+	public String[][] tableForm(){
+		String[][] table = new String[Categories.values().length][this.getFinalDayNumber() + 2];
+		Categories[] values = SimRun.Categories.values();
+		for(int i = 0; i <  Categories.values().length; i++) {
+			table[i][0] = values[i].name();
+		}
+		for(int i = 0; i < values.length; i++) {
+			for(int j = 0; j < variables.get(values[i]).size();j++) {
+				table[i][j+1] = variables.get(values[i]).get(j).toString();
+			}
+		}
+		return table;
+	}
+	
 }

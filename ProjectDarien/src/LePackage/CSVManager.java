@@ -10,7 +10,9 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Scanner;
 import java.util.TreeMap;
+import java.util.function.BiConsumer;
 
+import javafx.beans.property.SimpleIntegerProperty;
 import javafx.concurrent.Task;
 import javafx.stage.FileChooser;
 
@@ -23,6 +25,8 @@ public class CSVManager{
 	
 	private File analysisFile = null;
 	private String[][] analysisCells = null;
+	private File compressFile = null;
+	private String[][] compressCells = null;
 	private RunArguments runArgs = null;
 	public CSVManager(File file,RunArguments runArgs) {
 		this.CSVFile = file;
@@ -31,6 +35,9 @@ public class CSVManager{
 	
 	public void setRunArgs(RunArguments runArgs) {
 		this.runArgs = runArgs;
+	}
+	public RunArguments getRunArgs() {
+		return this.runArgs;
 	}
 	public String gC(int r, int c) {
 		Scanner s= null;
@@ -168,16 +175,18 @@ public class CSVManager{
 
 		@Override
 		protected Void call() throws Exception {
+			File path = new File(CSVFile.getParentFile().getAbsolutePath()+"/Analysis");
+			path.mkdirs();
+			analysisFile = new File(path.getAbsolutePath() + "/"+ CSVFile.getName() + "_Analysis.csv");
+			analysisFile.createNewFile();
 			TreeMap<String,HashMap<SimRun.Categories,Double>> averages = SimRun.averageAllResults(simRunData,runArgs);//SimRun.averageAllResults(adjustedSimRunData);
 			TreeMap<String,HashMap<SimRun.Categories,Double>> stdDev = SimRun.stdDevResults(averages, simRunData,runArgs);
-			
 			analysisCells = new String[100][100];
 			for(int row = 0; row < analysisCells.length; row++) {// fill with empty Strings to prevent error
 				Arrays.fill(analysisCells[row],"");
 			}
 			applyHeader();
 			applyParams();
-
 			applyAverageCheck(averages);
 			applyStdDevCheck(stdDev);
 			saveAnalysis();
@@ -186,6 +195,53 @@ public class CSVManager{
 		}
 		
 	};
+	
+	public Task<Void> compress = new Task<Void>() {
+
+		@Override
+		protected Void call() throws Exception {
+			HashMap<HashMap<String,String>,ArrayList<SimRun>> sortedRuns = SimRun.sortRunsByParameter(simRunData);
+			
+			File path = new File(CSVFile.getParentFile().getAbsolutePath()+"/Compress");
+			path.mkdirs();
+			compressFile = new File(path.getAbsolutePath() + "/"+ CSVFile.getName() + "_Compress.csv");
+			compressFile.createNewFile();
+			compressCells = new String[getLongestRow()+100][CSVRows.length+100];
+			
+			SimpleIntegerProperty I = new SimpleIntegerProperty();
+				sortedRuns.forEach(new BiConsumer<HashMap<String,String>,ArrayList<SimRun>>(){
+					@Override
+					public void accept(HashMap<String, String> param, ArrayList<SimRun> runs) {
+						//System.out.println(param);
+						//System.out.println(runs);
+						SimRun[] runsArray = runs.toArray(new SimRun[0]);
+						SimRun compressedRun = SimRun.compressRuns(runsArray);
+						String[][] table = compressedRun.tableForm();
+						
+						String[] keyArray = param.keySet().toArray(new String[0]);
+						if(I.get() == 0) {
+							for(int j = 0; j < param.size();j++) {
+								compressCells[0][j] = keyArray[j];
+							}
+						}
+						for(int j = 0; j < param.size();j++) {
+							compressCells[I.get() * SimRun.Categories.values().length +1][j] = param.get(keyArray[j]);
+						}
+						System.out.println(I.get());
+						for(int j =0; j < table.length;j++) {
+							for(int k = 0; k < table[j].length;k++) {
+								compressCells[I.get() * SimRun.Categories.values().length + j+1][k + param.size()] = table[j][k];
+							}
+						}
+						I.set(I.get()+1);
+						System.out.println(I.get());
+					}});
+			saveCompression();
+			return null;
+		}
+		
+	};
+	
 	public void applyHeader() {
 		for(int row = 0; row <= 5; row++) {
 			for(int col = 0; col <= 4; col++)
@@ -206,6 +262,9 @@ public class CSVManager{
 				analysisCells[count][1] = runArgs.getTargetParams().get(key);
 				count++;
 			}
+			analysisCells[count][0]= "Day";
+			if(runArgs.getDay() == -1)analysisCells[count][1] = "60";
+			else analysisCells[count][1] = runArgs.getDay() + "";
 		}
 	}
 	
@@ -255,8 +314,14 @@ public class CSVManager{
 		
 		
 	}
+	public File getCompressFile() {
+		return compressFile;
+	}
 	public File getAnalysisFile() {
 		return analysisFile;
+	}
+	public String[][] getAnalysisCells(){
+		return analysisCells;
 	}
 	public void applyStdDevCheck(TreeMap<String,HashMap<SimRun.Categories,Double>> stdDev) {
 		int row = 33;
@@ -283,24 +348,9 @@ public class CSVManager{
 		}
 		
 	}
-	
+
 	public void saveAnalysis() {
-		FileChooser fc = new FileChooser();
-		fc.setInitialDirectory(new File(System.getProperty("user.home")+"/Downloads"));
-		fc.setTitle("Chooser Location to Analysis File");
-		//File path = fc.showSaveDialog(new Stage());
-		File path = new File(CSVFile.getParentFile().getAbsolutePath()+"/Analysis");
-		path.mkdirs();
-		saveAnalysis(path);
-	}
-	public void saveAnalysis(File path) {
-		analysisFile = new File(path.getAbsolutePath() + "/"+ CSVFile.getName() + "_Analysis.csv");
-		try {
-			analysisFile.createNewFile();
-		} catch (IOException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
-		}
+		System.out.println("Saving");
 		FileOutputStream fos = null;
 		try {
 			fos = new FileOutputStream(analysisFile);
@@ -317,6 +367,35 @@ public class CSVManager{
 		}
 		pw.close();
 		System.out.println("Saved Analysis File at " + analysisFile.getAbsolutePath());
+		//try {
+		//	Runtime.getRuntime().exec("explorer.exe "+ file.getAbsolutePath());
+		//} catch (IOException e) {
+			// TODO Auto-generated catch block
+		//	e.printStackTrace();
+		//}
+	}
+	public void saveCompression() {
+		System.out.println("Saving");
+		FileOutputStream fos = null;
+		try {
+			fos = new FileOutputStream(compressFile);
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		PrintWriter pw = new PrintWriter(fos);
+		for(int row = 0; row < compressCells.length; row++) {
+			for(int col = 0; col < compressCells[row].length;col++) {
+				if(compressCells[col][row] != null) {
+					pw.write(compressCells[col][row] + ",");
+				}else {
+					pw.write(" ,");
+				}
+			}
+			pw.write("\n");
+		}
+		pw.close();
+		System.out.println("Saved Analysis File at " + compressFile.getAbsolutePath());
 		//try {
 		//	Runtime.getRuntime().exec("explorer.exe "+ file.getAbsolutePath());
 		//} catch (IOException e) {

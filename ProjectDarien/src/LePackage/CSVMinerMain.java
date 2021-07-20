@@ -1,12 +1,15 @@
 package LePackage;
 
 import java.io.File;
+import java.util.Arrays;
 import java.util.List;
 
+import LePackage.RunArguments.MODE;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
+import javafx.collections.FXCollections;
 import javafx.concurrent.WorkerStateEvent;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
@@ -14,10 +17,14 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.ScrollPane.ScrollBarPolicy;
+import javafx.scene.control.SpinnerValueFactory.ListSpinnerValueFactory;
+import javafx.scene.control.Spinner;
+import javafx.scene.control.SpinnerValueFactory;
 import javafx.scene.control.TextField;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -42,8 +49,10 @@ public class CSVMinerMain extends Application{
 	}
 	@Override
 	public void start(Stage primaryStage) throws Exception {
+		
 		primaryStage.setTitle("Project Darien Data Averager");
 		
+		Scene primaryScene = null;
 		BorderPane primaryPane = new BorderPane();
 		
 		ImageView banner = new ImageView(new Image(this.getClass().getResourceAsStream("udellogo.jpg")));
@@ -120,8 +129,19 @@ public class CSVMinerMain extends Application{
 
 						@Override
 						public void handle(WorkerStateEvent arg0) {
-							manager.analyize.run();
-							progtext.setText("Saved Analysis Sheet: " + manager.getAnalysisFile().getAbsolutePath());
+							if(manager.getRunArgs().getMode()== RunArguments.MODE.Average) {
+								manager.analyize.run();	
+								System.out.println("Manger: "+manager.getAnalysisFile());
+								progtext.setText("Saved Analysis Sheet: " + manager.getAnalysisFile().getAbsolutePath());
+							}
+							else if(manager.getRunArgs().getMode() == RunArguments.MODE.Compress) {
+								manager.compress.run();
+								System.out.println("Manger: "+manager.getCompressFile());
+								System.out.println(manager.compress.getException());
+								progtext.setText("Saved Compress Sheet: " + manager.getCompressFile().getAbsolutePath());
+							}
+							
+							// new GraphMaker(manager).showChart();
 							//pb.setVisible(false);
 							//progtext.setVisible(false);
 							//nextbackPane.getChildren().removeAll(pb,progtext);
@@ -129,10 +149,7 @@ public class CSVMinerMain extends Application{
 
 						}});
 					
-				}else if(primaryPane.getCenter().getId().equals("comparePane")) {//When it is the getCompareKeyandParamPane;
-					
 				}
-				
 			}});
 		backButton.setDisable(true);
 		backButton.setOnAction(new EventHandler<ActionEvent>() {
@@ -158,7 +175,7 @@ public class CSVMinerMain extends Application{
 		
 		
 		
-		Scene primaryScene = new Scene(primaryPane,WINDOWSIZEX,WINDOWSIZEY);
+		primaryScene = new Scene(primaryPane,WINDOWSIZEX,WINDOWSIZEY);
 		
 		primaryStage.setScene(primaryScene);
 		primaryStage.setResizable(false);
@@ -478,10 +495,44 @@ public class CSVMinerMain extends Application{
 				runArguments.setCompareKey(arg2);
 				System.out.println(runArguments.toString());
 			}});
+
+		TextField day = new TextField();
+		day.setPromptText("Day");
+		day.textProperty().addListener(new ChangeListener<String>() {
+
+			@Override
+			public void changed(ObservableValue<? extends String> arg0, String arg1, String arg2) {
+				for(char c: arg2.toCharArray()) {//check if all chars are digits
+					if(!Character.isDigit(c)) {
+						dataCol.setText(arg1);
+						return;
+					}
+				}
+				if(!arg2.isEmpty() && Integer.parseInt(arg2) > manager.getCSVRows().length) {
+					dataCol.setText(arg1);
+					return;
+				}
+				runArguments.setDay(Integer.parseInt(arg2));
+				System.out.println(runArguments.toString());
+			}});
 		
 		TextField filler3 = new TextField();//Useless, Not Visible
 		filler3.setVisible(false);
 		filler3.setDisable(true);
+		
+		TextField filler4 = new TextField();//Useless, Not Visible
+		filler4.setVisible(false);
+		filler4.setDisable(true);
+		
+		 CheckBox mode = new CheckBox();
+		 mode.setText("Compress Mode");
+		 mode.selectedProperty().addListener(new ChangeListener<Boolean>() {
+
+			@Override
+			public void changed(ObservableValue<? extends Boolean> arg0, Boolean arg1, Boolean arg2) {
+				runArguments.setMode((arg2.booleanValue())?RunArguments.MODE.Compress:RunArguments.MODE.Average);
+				System.out.println(runArguments.toString());
+			}});
 		
 		
 		autogenButton.setOnAction(new EventHandler<ActionEvent>() {
@@ -498,6 +549,7 @@ public class CSVMinerMain extends Application{
 				numOfParams.setText(runArguments.getNumofParams() + "");
 				dataRow.setText(runArguments.getDataRow() + "");
 				dataCol.setText(runArguments.getDataCol() + "");
+				day.setText(runArguments.getDay() + "");
 				compareKey.setText(runArguments.getCompareKey() + "");
 			}});
 		
@@ -515,6 +567,7 @@ public class CSVMinerMain extends Application{
 				numOfParams.setText(runArguments.getNumofParams() + "");
 				dataRow.setText(runArguments.getDataRow() + "");
 				dataCol.setText(runArguments.getDataCol() + "");
+				day.setText(runArguments.getDay() + "");
 				compareKey.setText(runArguments.getCompareKey() + "");
 			}});
 		
@@ -527,8 +580,8 @@ public class CSVMinerMain extends Application{
 		valuesBoxRight.setMaxWidth(WINDOWSIZEX/2);
 		valuesBoxLeft.setAlignment(Pos.CENTER);
 		valuesBoxRight.setAlignment(Pos.CENTER);
-		valuesBoxLeft.getChildren().addAll(secLen,runIDRow,paramsRow,numOfParams,dataRow,compareKey);
-		valuesBoxRight.getChildren().addAll(filler1,runIDCol,paramsCol,filler2,dataCol,filler3);
+		valuesBoxLeft.getChildren().addAll(secLen,runIDRow,paramsRow,numOfParams,dataRow,compareKey,day);
+		valuesBoxRight.getChildren().addAll(filler1,runIDCol,paramsCol,filler2,dataCol,filler3,mode);
 		
 		valuescrollPane.setContent(valuesBox);
 		valuescrollPane.setHbarPolicy(ScrollBarPolicy.NEVER);
